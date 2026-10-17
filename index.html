@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Bounce!</title>
+<style>
+  :root {
+    --bg: #0b1426;
+    --panel: #111d36;
+    --line: #23345a;
+    --text: #e8eefc;
+    --muted: #8a9bc2;
+    --accent: #38bdf8;
+    --accent-deep: #0284c7;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(ellipse at top, #13234a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  main {
+    width: 100%;
+    max-width: 560px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    height: 100%;
+  }
+
+  /* Header: title + player card */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 {
+    margin: 0;
+    font-size: clamp(28px, 7vw, 40px);
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    text-shadow: 0 0 24px rgba(56, 189, 248, 0.35);
+  }
+  .player {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 6px 10px 6px 6px;
+    min-width: 0;
+  }
+  .player img {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--line); object-fit: cover; image-rendering: pixelated;
+  }
+  .player-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+  .player-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .player-account { font-size: 12px; color: var(--muted); }
+  .signin {
+    font: inherit; font-size: 12px; font-weight: 700;
+    color: var(--accent); background: none; border: none; padding: 0;
+    cursor: pointer; text-align: left;
+  }
+
+  /* Score */
+  .score {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 14px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+  .label { font-size: 12px; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
+  .score-value {
+    font-size: clamp(40px, 11vw, 56px); font-weight: 900; line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .score-value.pop { animation: pop 0.18s ease-out; }
+  @keyframes pop { 50% { transform: scale(1.12); color: var(--accent); } }
+  .best { text-align: right; }
+  .best-value { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+  /* Game area */
+  .arena {
+    position: relative;
+    flex: 1;
+    min-height: 260px;
+    max-height: 520px;
+    background: linear-gradient(to bottom, rgba(56, 189, 248, 0.04), rgba(56, 189, 248, 0.0));
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  .message {
+    position: absolute; top: 18px; left: 0; right: 0;
+    text-align: center; font-weight: 700; font-size: 16px;
+    color: var(--text);
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .message small { display: block; margin-top: 4px; font-weight: 500; font-size: 12px; color: var(--muted); }
+  .message.warn { color: #fbbf24; }
+  .ground {
+    position: absolute; left: 8%; right: 8%; bottom: 28px; height: 2px;
+    background: linear-gradient(to right, transparent, var(--line) 15%, var(--line) 85%, transparent);
+  }
+  .shadow {
+    position: absolute; bottom: 22px; left: 50%;
+    width: 90px; height: 12px; margin-left: -45px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.45);
+    filter: blur(3px);
+  }
+  /* The hit target is bigger than the ball so it's easy to tap */
+  .ball-hit {
+    position: absolute; left: 50%; bottom: 14px;
+    width: var(--hit); height: var(--hit); margin-left: calc(var(--hit) / -2);
+    border: none; padding: 0; background: none; cursor: pointer;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 14px;
+    outline: none;
+    will-change: transform;
+  }
+  .ball {
+    width: var(--ball); height: var(--ball);
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, #bae6fd 0%, var(--accent) 35%, var(--accent-deep) 100%);
+    box-shadow: 0 0 30px rgba(56, 189, 248, 0.45), inset -8px -10px 18px rgba(2, 40, 80, 0.35);
+    transform-origin: 50% 100%;
+  }
+  .ball.squash { animation: squash 0.22s ease-out; }
+  @keyframes squash {
+    0%   { transform: scale(1.28, 0.72); }
+    55%  { transform: scale(0.92, 1.08); }
+    100% { transform: scale(1, 1); }
+  }
+  .ball-hit:focus-visible .ball { outline: 3px solid #fff; outline-offset: 4px; }
+
+  /* Footer */
+  .controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .hint { font-size: 13px; color: var(--muted); }
+  .hint kbd {
+    font: inherit; font-size: 11px; font-weight: 700;
+    border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 6px; padding: 1px 6px; color: var(--text);
+  }
+  .reset {
+    font: inherit; font-weight: 700; font-size: 14px;
+    color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 18px; cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .reset:hover { border-color: var(--accent); }
+  .reset:active { transform: scale(0.96); }
+  .status { font-size: 12px; color: var(--muted); text-align: center; min-height: 16px; margin-top: -6px; }
+
+  @media (hover: none) { .desktop-only { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>BOUNCE!</h1>
+    <div class="player" id="player">
+      <img id="face" alt="">
+      <div class="player-text">
+        <span class="player-name" id="playerName">Guest</span>
+        <span class="player-account" id="playerAccount"></span>
+        <button class="signin" id="signin" hidden>Sign in to save scores</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="score">
+    <div>
+      <div class="label">YOUR SCORE</div>
+      <div class="score-value" id="score">000</div>
+    </div>
+    <div class="best">
+      <div class="label">BEST</div>
+      <div class="best-value" id="best">000</div>
+    </div>
+  </section>
+
+  <section class="arena" id="arena">
+    <div class="message" id="message">Click the ball to make it bounce!<small>Keep it in the air: hit it again as it falls</small></div>
+    <div class="ground"></div>
+    <div class="shadow" id="shadow"></div>
+    <button class="ball-hit" id="ballHit" aria-label="Bounce the ball">
+      <div class="ball" id="ball"></div>
+    </button>
+  </section>
+
+  <div class="controls">
+    <span class="hint"><span class="desktop-only"><kbd>SPACE</kbd> also works</span></span>
+    <button class="reset" id="reset">Reset</button>
+  </div>
+  <div class="status" id="status"></div>
+</main>
+
+<script>
+(() => {
+  // ---------- Elements ----------
+  const $ = (id) => document.getElementById(id);
+  const arena = $('arena'), ballHit = $('ballHit'), ball = $('ball'), shadow = $('shadow');
+  const scoreEl = $('score'), bestEl = $('best'), messageEl = $('message'), statusEl = $('status');
+
+  // ---------- Best score (localStorage) ----------
+  const BEST_KEY = 'bounce-best';
+  let best = 0;
+  try { best = parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) {}
+  function saveBest() { try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {} }
+
+  const pad = (n) => String(n).padStart(3, '0');
+  function renderScore(pop) {
+    scoreEl.textContent = pad(score);
+    bestEl.textContent = pad(best);
+    if (pop) { scoreEl.classList.remove('pop'); void scoreEl.offsetWidth; scoreEl.classList.add('pop'); }
+  }
+  function setMessage(html, warn) {
+    messageEl.innerHTML = html;
+    messageEl.classList.toggle('warn', !!warn);
+  }
+
+  // ---------- Sizing ----------
+  let ballSize = 90, maxHeight = 200;
+  function resize() {
+    const w = arena.clientWidth, h = arena.clientHeight;
+    ballSize = Math.round(Math.max(64, Math.min(110, w * 0.2)));
+    arena.style.setProperty('--ball', ballSize + 'px');
+    arena.style.setProperty('--hit', Math.round(ballSize * 1.5) + 'px');
+    shadow.style.width = ballSize + 'px';
+    shadow.style.marginLeft = (-ballSize / 2) + 'px';
+    // Ball rests on the ground (28px from bottom); keep room for the message at the top.
+    maxHeight = Math.max(80, h - 28 - ballSize - 70);
+    y = Math.min(y, maxHeight);
+    draw();
+  }
+
+  // ---------- Physics ----------
+  // y = height above ground in px, vy = upward velocity in px/s
+  let y = 0, vy = 0, airborne = false, score = 0, lockedUntil = 0, last = 0, rafId = 0;
+
+  // Hang time shrinks as the score climbs, so it gets harder.
+  function physics() {
+    const apexTime = Math.max(0.3, 0.5 - score * 0.006);
+    const h = maxHeight * 0.75;
+    const g = (2 * h) / (apexTime * apexTime);
+    return { g, v0: g * apexTime };
+  }
+
+  function bounce() {
+    const now = performance.now();
+    if (now < lockedUntil) return;
+
+    if (!airborne) {
+      score = 0; // a new run starts
+      setMessage('Keep it up!');
+    } else if (vy > 0) {
+      // Still rising: too early. Short lockout stops button-mashing.
+      lockedUntil = now + 350;
+      setMessage('Too early! Wait for it to fall', true);
+      return;
+    } else {
+      setMessage('Keep it up!');
+    }
+
+    const { g, v0 } = physics();
+    // Never launch past the top of the game area.
+    vy = Math.min(v0, Math.sqrt(2 * g * Math.max(0, maxHeight - y)));
+    airborne = true;
+    score++;
+    renderScore(true);
+    if (!rafId) { last = now; rafId = requestAnimationFrame(tick); }
+  }
+
+  function tick(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    const { g } = physics();
+    vy -= g * dt;
+    y += vy * dt;
+    if (y > maxHeight) { y = maxHeight; vy = Math.min(vy, 0); }
+    if (y <= 0) { rafId = 0; land(); draw(); return; }
+    draw();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function land() {
+    y = 0; vy = 0; airborne = false;
+    ball.classList.remove('squash'); void ball.offsetWidth; ball.classList.add('squash');
+    endRun();
+  }
+
+  function draw() {
+    ballHit.style.transform = `translateY(${-y}px)`;
+    const t = 1 - Math.min(1, y / (maxHeight || 1));
+    shadow.style.transform = `scale(${0.45 + 0.55 * t})`;
+    shadow.style.opacity = 0.35 + 0.65 * t;
+  }
+
+  function endRun() {
+    const newBest = score > best;
+    if (newBest) { best = score; saveBest(); }
+    renderScore(false);
+    setMessage(newBest ? `New best: ${score}!<small>Click the ball to go again</small>`
+                       : `Landed! Score: ${score}<small>Click the ball to go again</small>`);
+    submitScore(score);
+  }
+
+  function reset() {
+    cancelAnimationFrame(rafId); rafId = 0;
+    y = 0; vy = 0; airborne = false; score = 0; lockedUntil = 0;
+    renderScore(false);
+    draw();
+    setMessage('Click the ball to make it bounce!<small>Keep it in the air: hit it again as it falls</small>');
+  }
+
+  // ---------- Input ----------
+  ballHit.addEventListener('pointerdown', (e) => { e.preventDefault(); bounce(); });
+  ballHit.addEventListener('click', (e) => e.preventDefault()); // pointerdown handles it
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space') return;
+    e.preventDefault();
+    if (!e.repeat) bounce();
+  });
+  $('reset').addEventListener('click', (e) => { reset(); e.currentTarget.blur(); });
+  window.addEventListener('resize', resize);
+
+  // ---------- start.ng (player + leaderboard via the connect page) ----------
+  const START_NG = 'https://start.ng';
+  let frameReady = null, user = null;
+
+  function connect() {
+    if (frameReady) return frameReady;
+    const frame = document.createElement('iframe');
+    frame.hidden = true;
+    frame.src = `${START_NG}/connect`;
+    frameReady = new Promise((resolve) => frame.addEventListener('load', () => resolve(frame), { once: true }));
+    document.body.appendChild(frame);
+    return frameReady;
+  }
+
+  function ask(msg, timeout = 5000) {
+    return new Promise((resolve) => {
+      const requestId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      let frame = null;
+      const done = (v) => { clearTimeout(timer); window.removeEventListener('message', onMessage); resolve(v); };
+      const timer = setTimeout(() => done(null), timeout);
+      function onMessage(e) {
+        if (e.origin !== START_NG || !frame || e.source !== frame.contentWindow) return;
+        if (!e.data || e.data.requestId !== requestId) return;
+        done(e.data);
+      }
+      window.addEventListener('message', onMessage);
+      connect().then((f) => {
+        frame = f;
+        f.contentWindow.postMessage({ ...msg, requestId }, START_NG);
+      });
+    });
+  }
+
+  const guestMode = new URLSearchParams(location.search).has('guest');
+
+  function showPlayer(reply) {
+    user = reply && reply.user ? reply.user : null;
+    const who = user || (reply && reply.guest) || { name: 'Guest' };
+    $('playerName').textContent = who.name || 'Guest';
+    $('playerAccount').textContent = user && user.account ? '@' + user.account : '';
+    $('playerAccount').hidden = !user;
+    const face = $('face');
+    if (who.face) { face.src = who.face; face.hidden = false; } else { face.hidden = true; }
+    // Guests get a sign-in prompt, unless they picked guest mode on start.ng.
+    $('signin').hidden = !!user || guestMode;
+  }
+
+  async function whoami() {
+    const reply = await ask({ type: 'startng:whoami' });
+    showPlayer(reply);
+  }
+
+  async function submitScore(value) {
+    if (!user || value <= 0) return;
+    const reply = await ask({ type: 'startng:score', score: value });
+    if (reply && reply.ok && reply.result) {
+      const r = reply.result;
+      statusEl.textContent = r.improved
+        ? `Saved to leaderboard${r.rank ? ` (rank #${r.rank})` : ''}`
+        : `Leaderboard best: ${r.best}${r.rank ? ` (rank #${r.rank})` : ''}`;
+    } else if (reply && !reply.ok) {
+      statusEl.textContent = "Couldn't save score";
+    }
+  }
+
+  $('signin').addEventListener('click', () => {
+    const back = location.href.split('#')[0];
+    location.href = `${START_NG}/?return_to=${encodeURIComponent(back)}`;
+  });
+  // The player may sign in or out in another tab.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) whoami(); });
+  window.addEventListener('focus', whoami);
+
+  // ---------- Start ----------
+  resize();
+  renderScore(false);
+  whoami();
+})();
+</script>
+</body>
+</html>
